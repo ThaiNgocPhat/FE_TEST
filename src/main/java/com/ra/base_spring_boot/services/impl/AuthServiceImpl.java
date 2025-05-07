@@ -1,84 +1,144 @@
 package com.ra.base_spring_boot.services.impl;
-
+import com.ra.base_spring_boot.dto.MessageResponse;
+import com.ra.base_spring_boot.dto.ResponseWrapper;
 import com.ra.base_spring_boot.dto.req.FormLogin;
 import com.ra.base_spring_boot.dto.req.FormRegister;
+import com.ra.base_spring_boot.dto.req.OtpDto;
 import com.ra.base_spring_boot.dto.resp.JwtResponse;
 import com.ra.base_spring_boot.exception.HttpBadRequest;
+import com.ra.base_spring_boot.exception.HttpConflict;
+import com.ra.base_spring_boot.exception.HttpNotFound;
 import com.ra.base_spring_boot.model.Role;
 import com.ra.base_spring_boot.model.User;
 import com.ra.base_spring_boot.model.constants.RoleName;
+import com.ra.base_spring_boot.repository.IRoleRepository;
 import com.ra.base_spring_boot.repository.IUserRepository;
 import com.ra.base_spring_boot.security.jwt.JwtProvider;
-import com.ra.base_spring_boot.security.principle.MyUserDetails;
 import com.ra.base_spring_boot.services.IAuthService;
 import com.ra.base_spring_boot.services.IRoleService;
+import com.ra.base_spring_boot.utils.MailService;
+import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements IAuthService
 {
-    private final IRoleService roleService;
+    private final IRoleRepository roleRepository;
     private final IUserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
     private final JwtProvider jwtProvider;
+    private final MailService mailService;
 
     @Override
-    public void register(FormRegister formRegister)
-    {
+    public void register(FormRegister request) throws MessagingException {
+        if (userRepository.findByUsername(request.getUsername()).isPresent()) {
+            throw new HttpConflict("Email or phone already exists");
+        }
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            throw new HttpBadRequest("Confirm Password Does Not Match, Please Try Again!");
+        }
         Set<Role> roles = new HashSet<>();
-        roles.add(roleService.findByRoleName(RoleName.ROLE_USER));
+        List<String> roleList = request.getRoles();
+        if (roleList != null && !roleList.isEmpty()) {
+            roleList.forEach(roleName -> {
+                Role role = roleRepository.findByRoleName(RoleName.valueOf(roleName.toUpperCase()))
+                        .orElseThrow(() -> new HttpNotFound("Role Not Found: " + roleName));
+                roles.add(role);
+            });
+        } else {
+            Role defaultRole = roleRepository.findByRoleName(RoleName.ROLE_USER)
+                    .orElseThrow(() -> new HttpNotFound("Default Role Not Found"));
+            roles.add(defaultRole);
+        }
+        String otp = jwtProvider.generateOTP();
         User user = User.builder()
-                .fullName(formRegister.getFullName())
-                .username(formRegister.getUsername())
-                .password(passwordEncoder.encode(formRegister.getPassword()))
-                .status(true)
-                .roles(roles)
+                .fullName(request.getFullName())
+                .birthDay(request.getBirthDay())
+                .username(request.getUsername())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .otp(otp)
+                .status(false)
+                .isVerified(false)
+                .isTimeExpired(LocalDateTime.now())
                 .build();
+        user.setRoles(roles);
+        user.setOtp(otp);
         userRepository.save(user);
+        mailService.sendOTPEmail(
+                user.getUsername(),
+                user.getFullName(),
+                user.getUsername(),
+                otp
+        );
+
     }
 
     @Override
-    public JwtResponse login(FormLogin formLogin)
-    {
-        Authentication authentication;
-        try
-        {
-            authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(formLogin.getUsername(), formLogin.getPassword()));
-        }
-        catch (AuthenticationException e)
-        {
-            throw new HttpBadRequest("Username or password is incorrect");
+    public ResponseWrapper<JwtResponse> login(FormLogin formLogin) {
+        User user = userRepository.findByUsername(formLogin.getUsername())
+                .orElseThrow(() -> new HttpBadRequest("User not found"));
+
+        if (!passwordEncoder.matches(formLogin.getPassword(), user.getPassword())) {
+            throw new HttpBadRequest("Wrong password");
         }
 
-        MyUserDetails userDetails = (MyUserDetails) authentication.getPrincipal();
-        if (!userDetails.getUser().getStatus())
-        {
-            throw new HttpBadRequest("your account is blocked");
+        if (user.getStatus() == null || !user.getStatus()) {
+            throw new HttpBadRequest("Account is inactive");
         }
 
+        if (user.getIsVerified() == null || !user.getIsVerified()) {
+            throw new HttpBadRequest("Account is not verified");
+        }
 
+        Set<Role> roles = user.getRoles();
+        if (roles == null || roles.isEmpty()) {
+            throw new HttpBadRequest("User has no roles");
+        }
 
+        String token = jwtProvider.generateToken(user.getUsername(), roles);
 
+        JwtResponse response = new JwtResponse();
+        response.setToken(token);
 
-        return JwtResponse.builder()
-                .accessToken(jwtProvider.generateToken(userDetails.getUsername()))
-                .user(userDetails.getUser())
-                .roles(userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toSet()))
-                .build();
+        ResponseWrapper<JwtResponse> responseWrapper = new ResponseWrapper<>();
+        responseWrapper.setStatus(HttpStatus.OK);
+        responseWrapper.setCode(200);
+        responseWrapper.setData(response);
+
+        return responseWrapper;
+    }
+
+    @Override
+    public MessageResponse verify(OtpDto otp) {
+        User user = userRepository.findByOtp(otp.getOtp())
+                .orElseThrow(() -> new HttpBadRequest("Invalid OTP"));
+
+        if (user.getIsVerified()) {
+            throw new HttpBadRequest("User is already verified");
+        }
+
+        if (otp.getOtp() == null || !otp.getOtp().trim().equals(user.getOtp().trim())) {
+            throw new HttpBadRequest("OTP is invalid");
+        }
+
+        user.setIsVerified(true);
+        user.setStatus(true);
+        user.setOtp(null);
+        userRepository.save(user);
+
+        MessageResponse response = new MessageResponse();
+        response.setMessage("User is verified");
+        return response;
     }
 
 

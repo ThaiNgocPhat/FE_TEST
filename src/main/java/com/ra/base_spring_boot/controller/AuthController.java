@@ -1,9 +1,13 @@
 package com.ra.base_spring_boot.controller;
 
+import com.ra.base_spring_boot.dto.MessageResponse;
 import com.ra.base_spring_boot.dto.ResponseWrapper;
 import com.ra.base_spring_boot.dto.req.FormLogin;
 import com.ra.base_spring_boot.dto.req.FormRegister;
+import com.ra.base_spring_boot.dto.req.OtpDto;
+import com.ra.base_spring_boot.dto.resp.JwtResponse;
 import com.ra.base_spring_boot.services.IAuthService;
+import jakarta.mail.MessagingException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -24,15 +28,10 @@ public class AuthController
      * @apiNote handle login with { username , password }
      */
     @PostMapping("/login")
-    public ResponseEntity<?> handleLogin(@Valid @RequestBody FormLogin formLogin)
+    public ResponseEntity<ResponseWrapper<JwtResponse>> login(@Valid @RequestBody FormLogin formLogin)
     {
-        return ResponseEntity.ok().body(
-                ResponseWrapper.builder()
-                        .status(HttpStatus.OK)
-                        .code(200)
-                        .data(authService.login(formLogin))
-                        .build()
-        );
+        ResponseWrapper<JwtResponse> responseWrapper = authService.login(formLogin);
+        return new ResponseEntity<>(responseWrapper, HttpStatus.OK);
     }
 
     /**
@@ -40,8 +39,7 @@ public class AuthController
      * @apiNote handle register with { fullName , username , password }
      */
     @PostMapping("/register")
-    public ResponseEntity<?> handleRegister(@Valid @RequestBody FormRegister formRegister)
-    {
+    public ResponseEntity<?> handleRegister(@Valid @RequestBody FormRegister formRegister) throws MessagingException {
         authService.register(formRegister);
         return ResponseEntity.created(URI.create("api/v1/auth/register")).body(
                 ResponseWrapper.builder()
@@ -52,4 +50,9 @@ public class AuthController
         );
     }
 
+    @PostMapping("/verify")
+    public ResponseEntity<MessageResponse> handleVerify(@RequestBody OtpDto otp) {
+        MessageResponse response = authService.verify(otp);
+        return new ResponseEntity<>(response, HttpStatus.OK);
+    }
 }

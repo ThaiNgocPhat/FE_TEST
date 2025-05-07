@@ -1,5 +1,6 @@
 package com.ra.base_spring_boot.security.jwt;
 
+import com.ra.base_spring_boot.model.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -10,10 +11,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import java.security.Key;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Component
 public class JwtProvider
@@ -62,16 +62,17 @@ public class JwtProvider
     }
 
 
-    public String generateToken(String username)
-    {
+    public String generateToken(String username, Set<Role> roles) {
         Map<String, Object> claims = new HashMap<>();
+        List<String> roleNames = roles.stream()
+                .map(role -> role.getRoleName().toString())
+                .collect(Collectors.toList());
+        claims.put("roles", roleNames);
+
         return createToken(claims, username);
     }
 
-
-    private String createToken(Map<String, Object> claims, String username)
-    {
-
+    private String createToken(Map<String, Object> claims, String username) {
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(username)
@@ -81,10 +82,16 @@ public class JwtProvider
                 .compact();
     }
 
+
     private Key getSignKey()
     {
         byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
+    public String generateOTP() {
+        Random rand = new Random();
+        int otp = 100000 + rand.nextInt(900000);
+        return String.valueOf(otp);
+    }
 }
