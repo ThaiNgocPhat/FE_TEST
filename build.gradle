@@ -42,6 +42,7 @@ dependencies {
     implementation group: 'com.google.api-client', name: 'google-api-client', version: '2.7.1'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+    implementation group: 'org.modelmapper', name: 'modelmapper', version: '3.1.0'
 }
 
 tasks.named('test') {
