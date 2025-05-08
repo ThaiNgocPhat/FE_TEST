@@ -1,9 +1,14 @@
 package com.ra.base_spring_boot.model;
-
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.ra.base_spring_boot.model.base.BaseObject;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.OneToMany;
 import lombok.*;
+
+import java.util.List;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -14,4 +19,9 @@ import lombok.*;
 public class Exam extends BaseObject {
     @Column(unique = true)
     private String examName;
+
+    @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL)
+    @JsonManagedReference
+    @JsonIgnore
+    private List<ExamSession> sessions;
 }

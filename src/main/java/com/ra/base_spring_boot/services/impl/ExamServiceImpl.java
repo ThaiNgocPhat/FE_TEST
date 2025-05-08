@@ -9,6 +9,7 @@ import com.ra.base_spring_boot.exception.HttpNotFound;
 import com.ra.base_spring_boot.model.Exam;
 import com.ra.base_spring_boot.repository.IExamRepository;
 import com.ra.base_spring_boot.services.IExamService;
+import com.ra.base_spring_boot.services.IExamSessionService;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
@@ -24,6 +25,7 @@ import java.util.Optional;
 public class ExamServiceImpl implements IExamService {
     private final IExamRepository examRepository;
     private final ModelMapper modelMapper;
+    private final IExamSessionService examSessionService;
 
     @Override
     public ResponseWrapper<Exam> updateExam(Long id, ExamDto req) {
@@ -67,6 +69,7 @@ public class ExamServiceImpl implements IExamService {
         }
         Exam exam = modelMapper.map(req, Exam.class);
         Exam addExam = examRepository.save(exam);
+        examSessionService.createDefaultSessionsForExam(addExam);
         ResponseWrapper<Exam> response = new ResponseWrapper<>();
         response.setCode(201);
         response.setStatus(HttpStatus.CREATED);
