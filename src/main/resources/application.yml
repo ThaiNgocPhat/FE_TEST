@@ -24,3 +24,14 @@ jwt:
   expired:
     access: 864000
 
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: thaingocphat231@gmail.com
+    password: "qora aght jalw asiv"
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
