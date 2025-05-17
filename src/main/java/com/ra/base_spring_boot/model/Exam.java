@@ -22,6 +22,6 @@ public class Exam extends BaseObject {
 
     @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL)
     @JsonManagedReference
-    @JsonIgnore
+//    @JsonIgnore
     private List<ExamSession> sessions;
 }
